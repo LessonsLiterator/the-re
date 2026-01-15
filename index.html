@@ -3,16 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>THE ROOM: REGENESIS</title>
+    <title>SHADOWMATIC REGENESIS</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div id="ui">
-        <div class="status">СИСТЕМА АКТИВНА</div>
-        <div class="level">ОБЪЕКТ #<span id="lvl-idx">1</span></div>
+    <div id="game-ui">
+        <div class="level-title">OBJECT #<span id="lvl-id">1</span></div>
+        <div class="hint">Найдите верный ракурс</div>
     </div>
-    <div id="container"></div>
-    <div id="flash"></div>
+    <div id="render-container"></div>
+    <div id="victory-flash"></div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.9.1/gsap.min.js"></script>
