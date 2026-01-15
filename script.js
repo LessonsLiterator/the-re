@@ -1,169 +1,178 @@
 /**
- * The Room: Shadow Engine
- * Логика: Тень из assets/shadows -> Цвет из assets/colors
+ * THE ROOM: SHADOW REALM ENGINE
  */
 
-let scene, camera, renderer, artifact, spotlight, wall, colorOverlay;
+let scene, camera, renderer, spotlight, artifactGroup, shadowPlane, colorPlane;
 let currentLvl = 1;
 let isDragging = false;
 let solved = false;
 
-const manager = new THREE.LoadingManager();
-const loader = new THREE.TextureLoader(manager);
+// Целевые углы (каждый уровень требует своего поворота)
+const targets = [
+    { x: 0, y: 0 },         // 1: Эмблема
+    { x: 1.5, y: 2.2 },     // 2: Пистолет
+    { x: 3.5, y: 1.0 },     // 3: Думающий
+    { x: 5.2, y: 4.1 },     // 4: Обычный
+    { x: 2.0, y: 3.5 }      // 5: Девочка
+];
 
-manager.onError = (url) => console.error('Ошибка загрузки:', url);
+const loader = new THREE.TextureLoader();
 
 function init() {
     scene = new THREE.Scene();
     camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.set(0, 0, 12);
+    camera.position.set(0, 0, 10);
 
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     document.getElementById('container').appendChild(renderer.domElement);
 
-    // Фоновая стена
-    const wallGeo = new THREE.PlaneGeometry(30, 30);
-    const wallMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 1 });
-    wall = new THREE.Mesh(wallGeo, wallMat);
+    // 1. СТЕНА
+    const wallGeo = new THREE.PlaneGeometry(25, 25);
+    const wallMat = new THREE.MeshStandardMaterial({ 
+        color: 0x1a1a1a, 
+        roughness: 0.9 
+    });
+    const wall = new THREE.Mesh(wallGeo, wallMat);
     wall.position.z = -5;
-    wall.receiveShadow = true;
     scene.add(wall);
 
-    // Плоскость для цветного маскота (появляется при победе)
-    const colorGeo = new THREE.PlaneGeometry(6, 6);
-    colorOverlay = new THREE.Mesh(colorGeo, new THREE.MeshBasicMaterial({ transparent: true, opacity: 0 }));
-    colorOverlay.position.z = -4.9;
-    scene.add(colorOverlay);
+    // 2. СЛОЙ ТЕНИ (assets/shadows)
+    shadowPlane = new THREE.Mesh(
+        new THREE.PlaneGeometry(6, 6),
+        new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, color: 0x000000 })
+    );
+    shadowPlane.position.z = -4.9;
+    scene.add(shadowPlane);
 
-    // Прожектор
-    spotlight = new THREE.SpotLight(0xffffff, 2.5);
-    spotlight.position.set(0, 0, 15);
-    spotlight.castShadow = true;
-    spotlight.shadow.mapSize.width = 2048;
-    spotlight.shadow.mapSize.height = 2048;
+    // 3. СЛОЙ ЦВЕТА (assets/colors)
+    colorPlane = new THREE.Mesh(
+        new THREE.PlaneGeometry(6, 6),
+        new THREE.MeshBasicMaterial({ transparent: true, opacity: 0 })
+    );
+    colorPlane.position.z = -4.8;
+    scene.add(colorPlane);
+
+    // 4. АРТЕФАКТ (Механический хаос)
+    artifactGroup = new THREE.Group();
+    createArtifact();
+    scene.add(artifactGroup);
+
+    // 5. СВЕТ
+    spotlight = new THREE.PointLight(0xffeebb, 2, 20);
+    spotlight.position.set(0, 2, 8);
     scene.add(spotlight);
-
-    scene.add(new THREE.AmbientLight(0xffffff, 0.2));
+    scene.add(new THREE.AmbientLight(0x404040, 0.5));
 
     loadLevel(currentLvl);
-    setupEvents();
+    addControls();
     animate();
 }
 
-function loadLevel(lvl) {
-    if (artifact) scene.remove(artifact);
-    solved = false;
-    colorOverlay.material.opacity = 0;
-    document.getElementById('lvl-idx').innerText = lvl;
-
-    artifact = new THREE.Group();
-
-    // Загружаем тень
-    loader.load(`assets/shadows/${lvl}.png`, (shadowTex) => {
-        // Создаем "слоеный" объект из тени
-        for (let i = 0; i < 5; i++) {
-            const mat = new THREE.MeshPhongMaterial({
-                map: shadowTex,
-                transparent: true,
-                alphaTest: 0.5,
-                color: 0x443322, // Цвет старого металла
-                side: THREE.DoubleSide
-            });
-            const p = new THREE.Mesh(new THREE.PlaneGeometry(5, 5), mat);
-            p.position.z = (i - 2) * 0.4;
-            p.position.x = (Math.random() - 0.5) * 0.3;
-            p.castShadow = true;
-            artifact.add(p);
-        }
+function createArtifact() {
+    // Создаем "сложный" объект из случайных золотых деталей
+    const geometries = [
+        new THREE.TorusGeometry(0.5, 0.1, 8, 16),
+        new THREE.BoxGeometry(0.3, 0.8, 0.2),
+        new THREE.CylinderGeometry(0.1, 0.1, 1, 8),
+        new THREE.SphereGeometry(0.2, 8, 8)
+    ];
+    const goldMat = new THREE.MeshStandardMaterial({ 
+        color: 0xaa8844, 
+        metalness: 0.9, 
+        roughness: 0.1 
     });
 
-    // Загружаем цветную версию для финала уровня
-    loader.load(`assets/colors/${lvl}.png`, (colorTex) => {
-        colorOverlay.material.map = colorTex;
-        colorOverlay.material.needsUpdate = true;
-    });
-
-    // Стартовый хаотичный поворот
-    artifact.rotation.set(Math.random() * 5, Math.random() * 5, 0);
-    scene.add(artifact);
-}
-
-function setupEvents() {
-    let prevMouse = { x: 0, y: 0 };
-
-    const startAction = () => isDragging = true;
-    const endAction = () => isDragging = false;
-    const moveAction = (e) => {
-        if (!isDragging || solved) return;
-        
-        const moveX = e.movementX || 0;
-        const moveY = e.movementY || 0;
-
-        artifact.rotation.y += moveX * 0.01;
-        artifact.rotation.x += moveY * 0.01;
-
-        checkSolve();
-    };
-
-    window.addEventListener('mousedown', startAction);
-    window.addEventListener('mouseup', endAction);
-    window.addEventListener('mousemove', moveAction);
-    
-    // Поддержка тач-скринов
-    window.addEventListener('touchstart', startAction);
-    window.addEventListener('touchend', endAction);
-    window.addEventListener('touchmove', (e) => {
-        const touch = e.touches[0];
-        artifact.rotation.y += 0.02;
-        checkSolve();
-    });
-}
-
-function checkSolve() {
-    // Проверка совпадения (угол близок к 0 или 2PI)
-    const rx = Math.abs(artifact.rotation.x % (Math.PI * 2));
-    const ry = Math.abs(artifact.rotation.y % (Math.PI * 2));
-    const threshold = 0.25;
-
-    if ((rx < threshold || rx > 6.0) && (ry < threshold || ry > 6.0)) {
-        triggerWin();
+    for(let i = 0; i < 40; i++) {
+        const mesh = new THREE.Mesh(geometries[Math.floor(Math.random()*geometries.length)], goldMat);
+        mesh.position.set((Math.random()-0.5)*3, (Math.random()-0.5)*3, (Math.random()-0.5)*3);
+        mesh.rotation.set(Math.random()*Math.PI, Math.random()*Math.PI, 0);
+        artifactGroup.add(mesh);
     }
 }
 
-function triggerWin() {
+function loadLevel(lvl) {
+    solved = false;
+    document.getElementById('lvl-idx').innerText = lvl;
+    
+    // Сбрасываем прозрачность
+    shadowPlane.material.opacity = 0;
+    colorPlane.material.opacity = 0;
+
+    // Загружаем картинки
+    loader.load(`assets/shadows/${lvl}.png`, (tex) => {
+        shadowPlane.material.map = tex;
+        shadowPlane.material.needsUpdate = true;
+    });
+    loader.load(`assets/colors/${lvl}.png`, (tex) => {
+        colorPlane.material.map = tex;
+        colorPlane.material.needsUpdate = true;
+    });
+
+    // Случайный поворот артефакта
+    artifactGroup.rotation.set(Math.random()*5, Math.random()*5, 0);
+}
+
+function addControls() {
+    window.addEventListener('mousedown', () => isDragging = true);
+    window.addEventListener('mouseup', () => isDragging = false);
+    window.addEventListener('mousemove', (e) => {
+        if (!isDragging || solved) return;
+        artifactGroup.rotation.y += e.movementX * 0.01;
+        artifactGroup.rotation.x += e.movementY * 0.01;
+        updateShadowLogic();
+    });
+}
+
+function updateShadowLogic() {
+    const target = targets[currentLvl - 1];
+    const rx = artifactGroup.rotation.x % (Math.PI * 2);
+    const ry = artifactGroup.rotation.y % (Math.PI * 2);
+
+    // Считаем дистанцию до цели
+    const dist = Math.sqrt(Math.pow(rx - target.x, 2) + Math.pow(ry - target.y, 2));
+
+    // Проявление тени (чем ближе, тем четче)
+    if (dist < 1.0) {
+        shadowPlane.material.opacity = 1.0 - dist;
+        // Эффект "блюра" через масштаб (имитация)
+        const s = 1.0 + dist * 0.5;
+        shadowPlane.scale.set(s, s, s);
+    } else {
+        shadowPlane.material.opacity = 0;
+    }
+
+    // Если очень близко - победа
+    if (dist < 0.15) {
+        win();
+    }
+}
+
+function win() {
     solved = true;
-    gsap.to(artifact.rotation, { x: 0, y: 0, duration: 0.6 });
+    gsap.to(artifactGroup.rotation, { x: targets[currentLvl-1].x, y: targets[currentLvl-1].y, duration: 0.5 });
     
     // Вспышка и проявление цвета
-    gsap.to("#flash", { opacity: 0.8, duration: 0.1, yoyo: true, repeat: 1 });
-    gsap.to(colorOverlay.material, { opacity: 1, duration: 1.2 });
+    gsap.to("#flash", { opacity: 0.6, duration: 0.1, yoyo: true, repeat: 1 });
+    gsap.to(colorPlane.material, { opacity: 1, duration: 1.5 });
 
     setTimeout(() => {
         if (currentLvl < 5) {
             currentLvl++;
-            gsap.to(artifact.scale, { x: 0, y: 0, duration: 0.5, onComplete: () => loadLevel(currentLvl) });
+            loadLevel(currentLvl);
         } else {
-            document.body.innerHTML = "<div style='color:#d4af37; font-size:30px; text-align:center; padding-top:20%'>АРТЕФАКТ ВОССТАНОВЛЕН</div>";
+            alert("Все тайны раскрыты.");
         }
-    }, 2500);
+    }, 3000);
 }
 
 function animate() {
     requestAnimationFrame(animate);
-    if(artifact && !solved) {
-        // Легкое покачивание для реализма
-        artifact.position.y = Math.sin(Date.now() * 0.001) * 0.1;
+    // Легкое парение артефакта
+    if (!isDragging) {
+        artifactGroup.position.y = Math.sin(Date.now()*0.001)*0.1;
     }
     renderer.render(scene, camera);
 }
-
-window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-});
 
 init();
